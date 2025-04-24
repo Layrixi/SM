@@ -10,8 +10,23 @@ import sys
 import scipy
 from tqdm import tqdm
 
+def plotSubplot2(x1,y1,x2,y2,title1="plot1",title2="plot2",document=None):
+        fig ,axs = plt.subplots(2,1,figsize=(10,7)) # tworzenie plota
+        plt.subplot(2,1,1)
+        plt.xlim(np.min(x1),np.max(x1))
+        plt.ylim(np.min(y1),np.max(y1))
+        plt.xlabel("X")
+        plt.ylabel("Y")
+        plt.plot(x1,y1)
 
-    
+        plt.subplot(2,1,2)
+        plt.xlim(np.min(x2),np.max(x2))
+        plt.ylim(np.min(y2),np.max(y2))
+        plt.xlabel("X")
+        plt.ylabel("Y")
+        plt.plot(x2,y2)
+        plt.show()
+
 def plotAudio(signal,fs,fsize,document=None,TimeMargin=[0,0.02],title="Audio"):
         fig ,axs = plt.subplots(2,1,figsize=(10,7)) # tworzenie plota
         fig.suptitle(title) 
@@ -116,13 +131,28 @@ def ALawDecompress(y):
     x[idy]=np.sign(y[idy]) * ( (np.exp( np.abs(y[idy]) * ( 1 + np.log(A)) - 1)) / A )
     return x
 
+def MuLawCompress(x):
+    mu=255
+    y=np.zeros(x.shape)
+    idx=np.abs(x)<=(1)
+    y[idx]=np.sign(x[idx]) * (np.log(1+mu*np.abs(x[idx])) / np.log(1+mu))
+    return y
 
+def MuLawCompress(y):
+    mu=255
+    x=np.zeros(y.shape)
+    idy=np.abs(y)<=(1)
+    x[idy]=np.sign(x[idy]) * (1/mu) * ( (1+mu)**np.abs(y[idy]) - 1)
+    return y
+
+
+
+"""#mulaw and alaw testing
 x=np.linspace(-1,1,1000)
 y=0.9*np.sin(np.pi*x*4)
 plt.plot(x)
 plt.show()
 xALawCompressed=ALawCompress(x)
-
 plt.plot(x,xALawCompressed)
 plt.show()
 xALawyCompressedKwant = kwant(xALawCompressed,6)
@@ -131,8 +161,15 @@ xALawDecompressed=ALawDecompress(xALawyCompressedKwant)
 plt.plot(xALawDecompressed)
 plt.show()
 
-#logical indexing test
-"""
+xMuLawCompressed=MuLawCompress(x)
+plt.plot(x,xMuLawCompressed)
+plt.show()
+xMuLawCompressedKwant = kwant(xMuLawCompressed,6)
+plt.plot(x,xMuLawCompressedKwant)
+plt.show()
+#"""
+
+"""#logical indexing test
 R=np.random.rand(5,5)
 A=np.zeros(R.shape)
 B=np.zeros(R.shape)
@@ -149,3 +186,15 @@ print(idx)
 print(A)
 print(B)
 print(C)#"""
+
+"""#tests v2
+x=np.linspace(-1,1,1000)
+y=0.9*np.sin(np.pi*x*4)
+plt.plot(x,y)
+plt.show()
+
+sinALawCompressed=kwant(ALawCompress(y),6)
+
+sinMuLawCompressed=kwant(MuLawCompress(y),6)
+
+plotSubplot2(x,sinALawCompressed,x,sinMuLawCompressed,"sinALaw","sinMuLaw")#"""
