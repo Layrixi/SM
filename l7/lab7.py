@@ -80,39 +80,60 @@ def kwant(data, bit):
         DataF = DataF * (n - m) + m
 
         return DataF.astype(data.dtype)
+
+#DPCM Z PREDYKCJĄ NIE DZIAŁA POPRAWNIE.
 #dpcm bez predykcji
 def DPCM_compress(x,bit):
     y=np.zeros(x.shape)
     e=0
     for i in range(0,x.shape[0]):
-        y[i]=kwant(x[i]-e,bit)
+        y[i]=kwant((x[i]-e).astype(x.dtype),bit)
         e+=y[i]
     return y
 
 #xp jrst dekompresja
-def DPCM_decompress(x,bit):
-    y=np.zeros(x.shape)
-    e=0
-    for i in range(0,x.shape[0]):
-        y[i]=kwant(x[i]+e,bit)
-        e+=y[i]
-    return y
+def DPCM_decompress(y):
+    x=np.zeros(y.shape)
+    x[0]=y[0]
+    for i in range(1,y.shape[0]):
+        x[i]=y[i]+x[i-1]
+    return x
 #dpcm z predykcją, najprostsza to np.mean
-def DPCM_compress(x,bit,predictor,n): 
+def DPCM_Pred_Compress(x,bit,predictor,n,ceil=False): 
     y=np.zeros(x.shape)
     xp=np.zeros(x.shape)
     e=0
     for i in range(0,x.shape[0]):
-        y[i]=kwant(x[i]-e,bit)
+        y[i]=kwant(np.floor(x[i]-e).astype(x.dtype),bit)
         xp[i]=y[i]+e
         idx=(np.arange(i-n,i,1,dtype=int)+1)
         idx=np.delete(idx,idx<0)
-        e=predictor(xp[idx])
+        e=predictor(xp[idx],ceil=ceil)
     return y
 
+def DPCM_Pred_Decompress(y,predictor,n,ceil=False):
+    x=np.zeros(y.shape)
+    e=0
+    for i in range(0,y.shape[0]):
+        x[i]=y[i]+e
+        idx=(np.arange(i-n,i,1,dtype=int)+1)
+        idx=np.delete(idx,idx<0)
+        e=predictor(x[idx],ceil=ceil)
+    return x
 def no_pred(X):
     return X[-1]
 
+def mean_pred(X, ceil=True):
+    if ceil:
+        return np.trunc(np.mean(X))
+    else:
+        return np.mean(X)
+
+def median_pred(X,ceil=True):
+    if ceil:
+        return np.ceil(np.median(X))
+    else:
+        return np.median(X)
 def ALawCompress(x):
     A=87.6
     y=np.zeros(x.shape)
@@ -198,3 +219,15 @@ sinALawCompressed=kwant(ALawCompress(y),6)
 sinMuLawCompressed=kwant(MuLawCompress(y),6)
 
 plotSubplot2(x,sinALawCompressed,x,sinMuLawCompressed,"sinALaw","sinMuLaw")#"""
+
+#DPCM test
+#x=np.array([15,16,20,14,5,10,15,13,11,7,10,11,20,1,23],dtype=np.int8)
+x=np.linspace(-1,1,1000)
+y=0.9*np.sin(np.pi*x*4)
+xCompressed=DPCM_compress(y,7)
+xDecompressed=DPCM_decompress(xCompressed)
+plt.plot(x,xDecompressed)
+plt.show()
+print("x: \n",x)
+print("xCompressed: \n",xCompressed)
+print("xDecompressed:\n",xDecompressed)
