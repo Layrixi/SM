@@ -21,10 +21,15 @@ class ver2:
         self.QY = QY
         self.QC = QC
 
-def testShow(PRZED_RGB,PO_RGB,document=None):
+def testShow(PRZED_RGB, PO_RGB, document=None, compression_ratios=None):
     # Wyświetlenie obrazów przed i po kompresji
+    PO_RGB = cv2.cvtColor(PO_RGB, cv2.COLOR_BGR2RGB)
     fig, axs = plt.subplots(4, 2 , sharey=True   )
     fig.set_size_inches(9,13)
+    title = "Obrazy przed i po kompresji"
+    if compression_ratios is not None:
+        title += f"\nKompresja Y: {compression_ratios[0]:.2%}, Cr: {compression_ratios[1]:.2%}, Cb: {compression_ratios[2]:.2%}"
+    fig.suptitle(title)
     # obraz oryginalny 
     axs[0,0].imshow(PRZED_RGB) #RGB 
     PRZED_YCrCb=cv2.cvtColor(PRZED_RGB,cv2.COLOR_RGB2YCrCb)
@@ -228,24 +233,28 @@ def DecompressBlock(vector,Q):
 ## podział na bloki
 # L - warstwa kompresowana
 # S - wektor wyjściowy
-def CompressLayer(L,Q):
+def CompressLayer(L, Q):
     S = np.array([])
     for w in range(0, L.shape[0], 8):
         for k in range(0, L.shape[1], 8):
             block = L[w:(w + 8), k:(k + 8)]
-            # Center the data
             block = block - 128
             S = np.append(S, CompressBlock(block, Q))
-    # Lossless compression
+    original_length = len(S)
     S, original_shape = ByteRun_compress(S)
-    return S, original_shape
+    compressed_length = len(S)
+    compression_ratio = compressed_length / original_length if original_length > 0 else 1
+    return S, original_shape, compression_ratio
 
 
 def DecompressLayer(S, original_shape, Q):
     # Lossless decompression
     S = ByteRun_decompress(S, original_shape)
     # Declare a matrix of the appropriate size
-    height, width = 128, 128
+    if(len(S) > 128*64):
+        height, width = 128, 128
+    else:
+        height, width = 128,64
     L = np.zeros((height, width))
     idx = 0
     for w in range(0, height, 8):
@@ -258,25 +267,27 @@ def DecompressLayer(S, original_shape, Q):
     return L
 
 
-def CompressJPEG(RGB, Ratio="4:4:4", QY=np.ones((8, 8)), QC=np.ones((8, 8)), ratio="4:4:4"):
+def CompressJPEG(RGB, Ratio="4:4:4", QY=np.ones((8, 8)), QC=np.ones((8, 8))):
     # RGB -> YCrCb
     YCrCb = cv2.cvtColor(RGB, cv2.COLOR_RGB2YCrCb).astype(int)
-    JPEG = ver2(YCrCb[:, :, 0], YCrCb[:, :, 1], YCrCb[:, :, 2], RGB.shape, Ratio, QY, QC)
     
     # Chroma subsampling
-    if ratio == "4:2:2":
-        JPEG.Cb = JPEG.Cb[::2, :]
-        JPEG.Cr = JPEG.Cr[::2, :]
-    elif ratio == "4:2:0":
+    if Ratio == "4:2:2":
+        Cb = YCrCb[:, ::2, 1].copy()  # Subsample Cb
+        Cr = YCrCb[:, ::2, 2].copy()  # Subsample Cr
+    elif Ratio == "4:2:0":
         pass
     else:  # Default "4:4:4"
-        JPEG.Cb = JPEG.Cb
-        JPEG.Cr = JPEG.Cr
+        Cb = YCrCb[:, :, 1]
+        Cr = YCrCb[:, :, 2]
     
+    JPEG = ver2(YCrCb[:, :, 0], Cb, Cr, RGB.shape, Ratio, QY, QC)
+
     # Compress each layer
-    JPEG.Y, JPEG.Y_shape = CompressLayer(JPEG.Y, JPEG.QY)
-    JPEG.Cr, JPEG.Cr_shape = CompressLayer(JPEG.Cr, JPEG.QC)
-    JPEG.Cb, JPEG.Cb_shape = CompressLayer(JPEG.Cb, JPEG.QC)
+    JPEG.Y, JPEG.Y_shape, Y_ratio = CompressLayer(JPEG.Y, JPEG.QY)
+    JPEG.Cr, JPEG.Cr_shape, Cr_ratio = CompressLayer(JPEG.Cr, JPEG.QC)
+    JPEG.Cb, JPEG.Cb_shape, Cb_ratio = CompressLayer(JPEG.Cb, JPEG.QC)
+    JPEG.compression_ratios = (Y_ratio, Cr_ratio, Cb_ratio)
 
     return JPEG
 
@@ -289,24 +300,21 @@ def DecompressJPEG(JPEG):
 
     # Chroma resampling
     if JPEG.ChromaRatio == "4:2:2":
-        # Resample horizontally to match the original width
-        Cb = np.repeat(Cb, 2, axis=1)[:JPEG.shape[0], :JPEG.shape[1]]
-        Cr = np.repeat(Cr, 2, axis=1)[:JPEG.shape[0], :JPEG.shape[1]]
+        Cb = np.repeat(Cb, 2, axis=1)
+        Cr = np.repeat(Cr, 2, axis=1)
     elif JPEG.ChromaRatio == "4:2:0":
         pass
     else:  # Default "4:4:4"
         # No resampling needed
-        Cb = Cb[:JPEG.shape[0], :JPEG.shape[1]]
-        Cr = Cr[:JPEG.shape[0], :JPEG.shape[1]]
+        Cb = Cb
+        Cr = Cr
 
     # Reconstruct the image
-    YCrCb = np.zeros((JPEG.shape[0], JPEG.shape[1], 3))
-    YCrCb[:, :, 0] = Y
-    YCrCb[:, :, 1] = Cb
-    YCrCb[:, :, 2] = Cr
+    YCrCb=np.dstack([Y,Cr,Cb]).clip(0,255).astype(np.uint8)
 
     # YCrCb -> RGB
-    return cv2.cvtColor(YCrCb.astype(np.uint8), cv2.COLOR_YCrCb2RGB)
+    YCrCb = cv2.cvtColor(YCrCb.astype(np.uint8), cv2.COLOR_YCrCb2RGB)
+    return YCrCb
 
 #irreversible part
 
@@ -380,22 +388,22 @@ for i, file in enumerate(files):
     JPEG = CompressJPEG(img, Ratio="4:4:4", QY=QY, QC=QC)
     document.add_heading('4:4:4 i tablice kwantyzacji', level=3)
     PO_RGB = DecompressJPEG(JPEG)
-    testShow(img, PO_RGB, document)    
+    testShow(img, PO_RGB, document, compression_ratios=JPEG.compression_ratios)
     #4:4:4 i tablice 1
     JPEG2 = CompressJPEG(img, Ratio="4:4:4", QY=QN, QC=QN)
     document.add_heading('4:4:4 i tablice 1', level=3)
     PO_RGB = DecompressJPEG(JPEG2)
-    testShow(img, PO_RGB, document)
+    testShow(img, PO_RGB, document, compression_ratios=JPEG2.compression_ratios)
     #4:2:2 i tablice 1
     JPEG3 = CompressJPEG(img, Ratio="4:2:2", QY=QN, QC=QN)
     document.add_heading('4:2:2 i tablice 1', level=3)
     PO_RGB = DecompressJPEG(JPEG3)
-    testShow(img, PO_RGB, document)
+    testShow(img, PO_RGB, document, compression_ratios=JPEG3.compression_ratios)
     #4:2:2 i tablice kwantyzacji
     JPEG4 = CompressJPEG(img, Ratio="4:2:2", QY=QY, QC=QC)
     document.add_heading('4:2:2 i tablice kwantyzacji', level=3)
     PO_RGB = DecompressJPEG(JPEG4)
-    testShow(img, PO_RGB, document)
+    testShow(img, PO_RGB, document, compression_ratios=JPEG4.compression_ratios)
     
 
 document.save('raport.docx')
