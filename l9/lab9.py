@@ -15,7 +15,7 @@ from docx.shared import Inches
 kat = pathlib.Path().absolute() / 'l9'  # katalog z plikami wideo
 plik="clip_2.mp4"                       # nazwa pliku
 ile= 15                                 # ile klatek odtworzyć? <0 - całość
-key_frame_counters = np.array([2,3,4,5,6,7])
+key_frame_counters = np.array([1,2,4,8])  # co ile klatek ma być kluczowa
 key_frame_counter=4                     # co która klatka ma być kluczowa i nie podlegać kompresji
 plot_frames=np.array([2,4,6,8,14])    # automatycznie wyrysuj wykresy
 #plot_frames=np.array([1,2,3,6,10,14,18])    # automatycznie wyrysuj wykresy
@@ -25,11 +25,7 @@ dzielnik=8                              # dzielnik przy zapisie różnicy
 wyswietlaj_kaltki=False                 # czy program ma wyświetlać klatki
 compressLuminance=False                  # czy kompresować luminancję    
 ROI = [                                 # regiony obrazu do wyświetlenia  porównawczego     
-    [50, 200, 50, 200],     
-    [150, 250, 150, 450],   
-    [260, 360, 320, 640],   
-    [160, 260, 0, 320],
-]
+        [150, 250, 150, 450], ]
 loseless=False                          # czy ma być wykorzystany byterun   
 
 ##############################################################################
@@ -232,23 +228,26 @@ def compress_not_KeyFrame(Frame_class, KeyFrame, inne_paramerty_do_dopisania=Non
     Compress_data = data()
     if loseless:
         if compressLuminance:
-            y_diff = (Frame_class.Y - ByteRun_decompress(KeyFrame.Y, KeyFrame.Y_shape)) / dzielnik
+            y_ref = ByteRun_decompress(KeyFrame.Y, KeyFrame.Y_shape)
+            y_diff = (Frame_class.Y - y_ref) / dzielnik
+            Compress_data.Y, Compress_data.Y_shape = ByteRun_compress(y_diff)
         else:
-            y_diff = (Frame_class.Y - KeyFrame.Y) / dzielnik
-        cb_diff = (Frame_class.Cb - ByteRun_decompress(KeyFrame.Cb, KeyFrame.Cb_shape)) / dzielnik
-        cr_diff = (Frame_class.Cr - ByteRun_decompress(KeyFrame.Cr, KeyFrame.Cr_shape)) / dzielnik
-        Compress_data.Y, Compress_data.Y_shape = ByteRun_compress(y_diff)
+            y_ref = KeyFrame.Y
+            y_diff = (Frame_class.Y - y_ref) / dzielnik
+            Compress_data.Y = y_diff  # 2D, not compressed
+        cb_ref = ByteRun_decompress(KeyFrame.Cb, KeyFrame.Cb_shape)
+        cr_ref = ByteRun_decompress(KeyFrame.Cr, KeyFrame.Cr_shape)
+        cb_diff = (Frame_class.Cb - cb_ref) / dzielnik
+        cr_diff = (Frame_class.Cr - cr_ref) / dzielnik
         Compress_data.Cb, Compress_data.Cb_shape = ByteRun_compress(cb_diff)
         Compress_data.Cr, Compress_data.Cr_shape = ByteRun_compress(cr_diff)
     else:
-        y_diff = (Frame_class.Y - KeyFrame.Y)/dzielnik
-        cb_diff = (Frame_class.Cb - KeyFrame.Cb)/dzielnik
-        cr_diff = (Frame_class.Cr - KeyFrame.Cr)/dzielnik
+        y_diff = (Frame_class.Y - KeyFrame.Y) / dzielnik
+        cb_diff = (Frame_class.Cb - KeyFrame.Cb) / dzielnik
+        cr_diff = (Frame_class.Cr - KeyFrame.Cr) / dzielnik
         Compress_data.Y = y_diff
         Compress_data.Cb = cb_diff
         Compress_data.Cr = cr_diff
-
-    
     return Compress_data
 
 def decompress_not_KeyFrame(Compress_data, KeyFrame, inne_paramerty_do_dopisania=None):
@@ -256,7 +255,7 @@ def decompress_not_KeyFrame(Compress_data, KeyFrame, inne_paramerty_do_dopisania
         if compressLuminance:
             Y = (dzielnik * ByteRun_decompress(Compress_data.Y, Compress_data.Y_shape)) + ByteRun_decompress(KeyFrame.Y, KeyFrame.Y_shape)
         else:
-            Y = (dzielnik * Compress_data.Y) + KeyFrame.Y
+            Y = (dzielnik * Compress_data.Y) + KeyFrame.Y  # Y is 2D, not compressed
         Cb = ByteRun_decompress(Compress_data.Cb, Compress_data.Cb_shape)
         Cr = ByteRun_decompress(Compress_data.Cr, Compress_data.Cr_shape)
         Cb = (dzielnik * Cb) + ByteRun_decompress(KeyFrame.Cb, KeyFrame.Cb_shape)
@@ -307,80 +306,79 @@ def plotDiffrence(ReferenceFrame,DecompressedFrame,ROI,document=None):
 ##############################################################################
 document = Document()
 document.add_heading('Sprawozdanie 9',0) # tworzenie nagłówków, druga wartość to poziom nagłówka
-files = ["clip_2.mp4","clip_3.mp4"   ]
-for file in files:
-    plik = file
-    cap = cv2.VideoCapture(kat / plik)
+#files = ["clip_2.mp4","clip_3.mp4"   ]
+document.add_heading('Część 1 - badanie jakości dla różnych parametrów', level=1)
+files = ["clip_2.mp4"] 
+plik = files[0]
+cap = cv2.VideoCapture(kat / plik)
 
-    if ile<0:
-        ile=int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+if ile<0:
+    ile=int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-    cv2.namedWindow('Normal Frame')
-    cv2.namedWindow('Decompressed Frame')
+cv2.namedWindow('Normal Frame')
+cv2.namedWindow('Decompressed Frame')
 
-    compression_information=np.zeros((3,ile))
+compression_information=np.zeros((3,ile))
 
-    document.add_heading('Plik: {}'.format(plik), level=1)
-    document.add_heading('Subsampling: {}'.format(subsampling), level=2)
-    document.add_heading('Dzielnik: {}'.format(dzielnik), level=2)
-    document.add_heading('Kompresja bezstratna: ByteRun', level=2)
-    #####test part####
-    #testowane_subsamplingi = ["4:4:4", "4:2:2", "4:2:0", "4:4:0", "4:1:0"]
-    #testowane_dzielniki = [1, 2, 4, 8]
-    #najlepsza_kompresja = -np.inf
-    #najlepsze_ustawienia = (None, None)
-    #for subs in tqdm(testowane_subsamplingi,desc ="Testing subsampling"):
-        #for dz in tqdm(testowane_dzielniki,desc ="Testing divider"):
-            #subsampling = subs
-            #dzielnik = dz
-    for counter in tqdm(key_frame_counters, desc="Testing KeyFrame"):
-        #bez kompresji luminancji
-        compressLuminance=False
+document.add_heading('Plik: {}'.format(plik), level=1)
+document.add_heading('Subsampling: {}'.format(subsampling), level=2)
+document.add_heading('Dzielnik: {}'.format(dzielnik), level=2)
+#####test part####
+testowane_subsamplingi = ["4:4:4", "4:2:2", "4:2:0", "4:4:0", "4:1:0"]
+testowane_key_frame_counters = key_frame_counters  
+
+najlepsza_kompresja = -np.inf
+najlepsze_ustawienia = (None, None)
+
+for subs in tqdm(testowane_subsamplingi, desc="Testing subsampling"):
+    for counter in tqdm(testowane_key_frame_counters, desc="Testing KeyFrame interval"):
+        dz=counter
+        subsampling = subs
+        key_frame_counter = counter
         suma_poczatkowa = 0
         suma_po_kompresji = 0
-        document.add_heading('Klatka kluczowa co: {} klatki'.format(counter), level=2)
-        key_frame_counter=counter
+        document.add_heading(f'Subsampling: {subsampling}, KeyFrame co: {key_frame_counter} klatki', level=2)
         for i in tqdm(range(ile), desc="Processing frames"):
             ret, frame = cap.read()
             if wyswietlaj_kaltki:
-                cv2.imshow('Normal Frame',frame)
-            frame=cv2.cvtColor(frame,cv2.COLOR_BGR2YCrCb)
-            Frame_class = frame_image_to_class(frame,subsampling)
+                cv2.imshow('Normal Frame', frame)
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2YCrCb)
+            Frame_class = frame_image_to_class(frame, subsampling)
             original_size = get_size(frame)
 
-            if (i % key_frame_counter)==0: # pobieranie klatek kluczowych
+            #######kompresja i dekompresja klatek
+            if (i % key_frame_counter) == 0:
                 KeyFrame = compress_KeyFrame(Frame_class)
                 compressed_size = get_size(KeyFrame)
-                cY=KeyFrame.Y
-                cCb=KeyFrame.Cb
-                cCr=KeyFrame.Cr
+                cY = KeyFrame.Y
+                cCb = KeyFrame.Cb
+                cCr = KeyFrame.Cr
                 Decompresed_Frame = decompress_KeyFrame(KeyFrame)
-            else: # kompresja
+            else:
                 Compress_data = compress_not_KeyFrame(Frame_class, KeyFrame)
                 compressed_size = get_size(Compress_data)
-                cY=Compress_data.Y
-                cCb=Compress_data.Cb
-                cCr=Compress_data.Cr
-                Decompresed_Frame = decompress_not_KeyFrame(Compress_data,  KeyFrame)
-            
-            compression_information[0,i]= (frame[:,:,0].size - cY.size)/frame[:,:,0].size
-            compression_information[1,i]= (frame[:,:,0].size - cCb.size)/frame[:,:,0].size
-            compression_information[2,i]= (frame[:,:,0].size - cCr.size)/frame[:,:,0].size  
+                cY = Compress_data.Y
+                cCb = Compress_data.Cb
+                cCr = Compress_data.Cr
+                Decompresed_Frame = decompress_not_KeyFrame(Compress_data, KeyFrame)
+
+            compression_information[0, i] = (frame[:, :, 0].size - cY.size) / frame[:, :, 0].size
+            compression_information[1, i] = (frame[:, :, 0].size - cCb.size) / frame[:, :, 0].size
+            compression_information[2, i] = (frame[:, :, 0].size - cCr.size) / frame[:, :, 0].size
+
+            ######sprawozdanie
             if wyswietlaj_kaltki:
-                cv2.imshow('Decompressed Frame',cv2.cvtColor(Decompresed_Frame,cv2.COLOR_YCrCb2BGR))
-            
-            if np.any(plot_frames==i): # rysuj wykresy
-                print("printing difference")
+                cv2.imshow('Decompressed Frame', cv2.cvtColor(Decompresed_Frame, cv2.COLOR_YCrCb2BGR))
+
+            if np.any(plot_frames == i):
                 for r in ROI:
                     if document is not None:
-                        document.add_heading('Klatka: {}, subsampling: {}, dzielnik: {}'.format(i,subsampling,dzielnik), level=3)
-                        document.add_heading('Region: {}'.format(r), level=4)
-                        document.add_paragraph('Sposób kompresji bezstratnej: ByteRun')
-                        plotDiffrence(frame,Decompresed_Frame,r,document)
+                        document.add_paragraph(f'Region: {r}, klatka: {i}')
+                        plotDiffrence(frame, Decompresed_Frame, r, document)
                     else:
-                        plotDiffrence(frame,Decompresed_Frame,r)
-                
-            if np.any(auto_pause_frames==i):
+                        plotDiffrence(frame, Decompresed_Frame, r)
+
+            if np.any(auto_pause_frames == i):
                 cv2.waitKey(-1) #wait until any key is pressed
             
             k = cv2.waitKey(1) & 0xff
@@ -392,86 +390,252 @@ for file in files:
             
             suma_poczatkowa += original_size
             suma_po_kompresji += compressed_size
-
-
+        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
         stopien_kompresji = suma_poczatkowa / suma_po_kompresji
-        document.add_heading('Stopień kompresji pliku bez kompresji bezstratnej luminancji: {}'.format(stopien_kompresji),level=2)
+        print(f"Test: {subs}, dzielnik={dz}, CR={stopien_kompresji:.2f}")
+        document.add_paragraph(f'Test: {subs}, dzielnik={dz}, Stopień kompresji: {stopien_kompresji:.2f}')
+        if stopien_kompresji > najlepsza_kompresja:
+            najlepsza_kompresja = stopien_kompresji
+            najlepsze_ustawienia = (subs, dz)
+    print(f"\n>> Najlepsze ustawienia: {subsampling}, dzielnik={dzielnik}, kompresja={najlepsza_kompresja:.2f}")
+document.add_heading('Najlepsze ustawienia: {}, dzielnik={}, kompresja={:.2f}'.format(najlepsze_ustawienia[0], najlepsze_ustawienia[1], najlepsza_kompresja), level=2)
+
+document.add_heading('Część 2 - kompresja bezstratna', level=1)
+
+subsampling = najlepsze_ustawienia[0]  # ustawienie najlepszych parametrów
+key_frame_counter = najlepsze_ustawienia[1]  # ustawienie najlepszych parametrów
+#cz2
+
+#########################################################
+########################################################
+######################################################
+loseless = True  # ustawienie kompresji bezstratnej
 
 
-        #kompresja luminancji też
-        compressLuminance=True
-        suma_poczatkowa = 0
-        suma_po_kompresji = 0
+compressLuminance = True
+key_frame_counters = np.array([1,2,3,4,7,8])  # co ile klatek ma być kluczowa
 
-        for i in tqdm(range(ile), desc="Processing frames"):
-            ret, frame = cap.read()
-            if wyswietlaj_kaltki:
-                cv2.imshow('Normal Frame',frame)
-            frame=cv2.cvtColor(frame,cv2.COLOR_BGR2YCrCb)
-            Frame_class = frame_image_to_class(frame,subsampling)
-            original_size = get_size(frame)
+cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+compression_information = np.zeros((3, ile))
 
-            if (i % key_frame_counter)==0: # pobieranie klatek kluczowych
-                KeyFrame = compress_KeyFrame(Frame_class)
-                compressed_size = get_size(KeyFrame)
-                cY=KeyFrame.Y
-                cCb=KeyFrame.Cb
-                cCr=KeyFrame.Cr
-                Decompresed_Frame = decompress_KeyFrame(KeyFrame)
-            else: # kompresja
-                Compress_data = compress_not_KeyFrame(Frame_class, KeyFrame)
-                compressed_size = get_size(Compress_data)
-                cY=Compress_data.Y
-                cCb=Compress_data.Cb
-                cCr=Compress_data.Cr
-                Decompresed_Frame = decompress_not_KeyFrame(Compress_data,  KeyFrame)
-            
-            compression_information[0,i]= (frame[:,:,0].size - cY.size)/frame[:,:,0].size
-            compression_information[1,i]= (frame[:,:,0].size - cCb.size)/frame[:,:,0].size
-            compression_information[2,i]= (frame[:,:,0].size - cCr.size)/frame[:,:,0].size  
-            if wyswietlaj_kaltki:
-                cv2.imshow('Decompressed Frame',cv2.cvtColor(Decompresed_Frame,cv2.COLOR_YCrCb2BGR))
-            
-            if np.any(plot_frames==i): # rysuj wykresy
-                print("printing difference")
-                for r in ROI:
-                    if document is not None:
-                        document.add_heading('Klatka: {}, subsampling: {}, dzielnik: {}'.format(i,subsampling,dzielnik), level=3)
-                        document.add_heading('Region: {}'.format(r), level=4)
-                        document.add_paragraph('Sposób kompresji bezstratnej: ByteRun')
-                        plotDiffrence(frame,Decompresed_Frame,r,document)
-                    else:
-                        plotDiffrence(frame,Decompresed_Frame,r)
-                
-            if np.any(auto_pause_frames==i):
-                cv2.waitKey(-1) #wait until any key is pressed
-            
-            k = cv2.waitKey(1) & 0xff
-            
-            if k==ord('q'):
-                break
-            elif k == ord('p'):
-                cv2.waitKey(-1) #wait until any key is pressed
-            
-            suma_poczatkowa += original_size
-            suma_po_kompresji += compressed_size
+if document is not None:
+    document.add_heading('Kompresja z luminancją', level=2)
+for key_frame_counter in key_frame_counters:
+    print(key_frame_counter)
+    dzielnik = key_frame_counter
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # resetowanie pozycji odtwarzania
+    for i in tqdm(range(ile), desc="Processing frames (with luminance compression)"):
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        if wyswietlaj_kaltki:
+            cv2.imshow('Normal Frame', frame)
+
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2YCrCb)
+        Frame_class = frame_image_to_class(frame, subsampling)
+        original_size = get_size(frame)
+
+        if (i % key_frame_counter) == 0:
+            KeyFrame = compress_KeyFrame(Frame_class)
+            compressed_size = get_size(KeyFrame)
+            cY = KeyFrame.Y
+            cCb = KeyFrame.Cb
+            cCr = KeyFrame.Cr
+            Decompresed_Frame = decompress_KeyFrame(KeyFrame)
+        else:
+            Compress_data = compress_not_KeyFrame(Frame_class, KeyFrame)
+            compressed_size = get_size(Compress_data)
+            cY = Compress_data.Y
+            cCb = Compress_data.Cb
+            cCr = Compress_data.Cr
+            Decompresed_Frame = decompress_not_KeyFrame(Compress_data, KeyFrame)
+
+        compression_information[0, i] = (frame[:, :, 0].size - cY.size) / frame[:, :, 0].size
+        compression_information[1, i] = (frame[:, :, 0].size - cCb.size) / frame[:, :, 0].size
+        compression_information[2, i] = (frame[:, :, 0].size - cCr.size) / frame[:, :, 0].size
+
+        if wyswietlaj_kaltki:
+            cv2.imshow('Decompressed Frame', cv2.cvtColor(Decompresed_Frame, cv2.COLOR_YCrCb2BGR))
 
 
-        stopien_kompresji = suma_poczatkowa / suma_po_kompresji
-        document.add_heading('Stopień kompresji pliku z kompresją bezstratną luminancji: {}'.format(stopien_kompresji),level=2)
+        if np.any(auto_pause_frames == i):
+            cv2.waitKey(-1)
+
+        k = cv2.waitKey(1) & 0xff
+        if k == ord('q'):
+            break
+        elif k == ord('p'):
+            cv2.waitKey(-1)
+
+    # wykres kompresji
+    plt.figure()
+    plt.plot(np.arange(0, ile), compression_information[0, :] * 100, label='Y')
+    plt.plot(np.arange(0, ile), compression_information[1, :] * 100, label='Cb')
+    plt.plot(np.arange(0, ile), compression_information[2, :] * 100, label='Cr')
+    plt.title("File:{}, subsampling={}, divider={}, KeyFrame={},\n Kompresja bezstratna ByteRun".format(plik, subsampling, dzielnik, key_frame_counter))
+    plt.xlabel('Frame')
+    plt.ylabel('Compression [%]')
+    plt.legend()
+
+    img_stream = BytesIO()
+    plt.savefig(img_stream, format='png')
+    img_stream.seek(0)
+    if document is not None:
+        document.add_picture(img_stream, width=Inches(6))
+    img_stream.close()
+    plt.close()
+
+#bez kompresji luminancji
+compressLuminance = False
+cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+compression_information = np.zeros((3, ile))
+
+if document is not None:
+    document.add_heading('Kompresja bez luminancji', level=2)
+for key_frame_counter in key_frame_counters:
+    print(key_frame_counter)
+    dzielnik = key_frame_counter
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # resetowanie pozycji odtwarzania
+    for i in tqdm(range(ile), desc="Processing frames (with luminance compression)"):
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        if wyswietlaj_kaltki:
+            cv2.imshow('Normal Frame', frame)
+
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2YCrCb)
+        Frame_class = frame_image_to_class(frame, subsampling)
+        original_size = get_size(frame)
+
+        if (i % key_frame_counter) == 0:
+            KeyFrame = compress_KeyFrame(Frame_class)
+            compressed_size = get_size(KeyFrame)
+            cY = KeyFrame.Y
+            cCb = KeyFrame.Cb
+            cCr = KeyFrame.Cr
+            Decompresed_Frame = decompress_KeyFrame(KeyFrame)
+        else:
+            Compress_data = compress_not_KeyFrame(Frame_class, KeyFrame)
+            compressed_size = get_size(Compress_data)
+            cY = Compress_data.Y
+            cCb = Compress_data.Cb
+            cCr = Compress_data.Cr
+            Decompresed_Frame = decompress_not_KeyFrame(Compress_data, KeyFrame)
+
+        compression_information[0, i] = (frame[:, :, 0].size - cY.size) / frame[:, :, 0].size
+        compression_information[1, i] = (frame[:, :, 0].size - cCb.size) / frame[:, :, 0].size
+        compression_information[2, i] = (frame[:, :, 0].size - cCr.size) / frame[:, :, 0].size
+
+        if wyswietlaj_kaltki:
+            cv2.imshow('Decompressed Frame', cv2.cvtColor(Decompresed_Frame, cv2.COLOR_YCrCb2BGR))
+
+       
+
+        if np.any(auto_pause_frames == i):
+            cv2.waitKey(-1)
+
+        k = cv2.waitKey(1) & 0xff
+        if k == ord('q'):
+            break
+        elif k == ord('p'):
+            cv2.waitKey(-1)
+
+    # wykres kompresji
+    plt.figure()
+    plt.plot(np.arange(0, ile), compression_information[0, :] * 100, label='Y')
+    plt.plot(np.arange(0, ile), compression_information[1, :] * 100, label='Cb')
+    plt.plot(np.arange(0, ile), compression_information[2, :] * 100, label='Cr')
+    plt.title("File:{}, subsampling={}, divider={}, KeyFrame={},\n Kompresja bezstratna: ByteRun".format(plik, subsampling, dzielnik, key_frame_counter))
+    plt.xlabel('Frame')
+    plt.ylabel('Compression [%]')
+    plt.legend()
+
+    img_stream = BytesIO()
+    plt.savefig(img_stream, format='png')
+    img_stream.seek(0)
+    if document is not None:
+        document.add_picture(img_stream, width=Inches(6))
+    img_stream.close()
+    plt.close()
+
+    
+# dla innego filmu
+document.add_heading('Część 3 - inny film', level=1)
+plik = "clip_3.mp4"
+document.add_heading('Plik: {}'.format(plik), level=2)
+cap = cv2.VideoCapture(kat / plik)
+compressLuminance = True  # ustawienie kompresji bezstratnej
+key_frame_counter = 3  # co która klatka ma być kluczowa i nie podlegać kompresji
+
+dzielnik = key_frame_counter
+cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # resetowanie pozycji odtwarzania
+for i in tqdm(range(ile), desc="Processing frames (with luminance compression)"):
+    ret, frame = cap.read()
+    if not ret:
+        break
+
+    if wyswietlaj_kaltki:
+        cv2.imshow('Normal Frame', frame)
+
+    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2YCrCb)
+    Frame_class = frame_image_to_class(frame, subsampling)
+    original_size = get_size(frame)
+
+    if (i % key_frame_counter) == 0:
+        KeyFrame = compress_KeyFrame(Frame_class)
+        compressed_size = get_size(KeyFrame)
+        cY = KeyFrame.Y
+        cCb = KeyFrame.Cb
+        cCr = KeyFrame.Cr
+        Decompresed_Frame = decompress_KeyFrame(KeyFrame)
+    else:
+        Compress_data = compress_not_KeyFrame(Frame_class, KeyFrame)
+        compressed_size = get_size(Compress_data)
+        cY = Compress_data.Y
+        cCb = Compress_data.Cb
+        cCr = Compress_data.Cr
+        Decompresed_Frame = decompress_not_KeyFrame(Compress_data, KeyFrame)
+
+    compression_information[0, i] = (frame[:, :, 0].size - cY.size) / frame[:, :, 0].size
+    compression_information[1, i] = (frame[:, :, 0].size - cCb.size) / frame[:, :, 0].size
+    compression_information[2, i] = (frame[:, :, 0].size - cCr.size) / frame[:, :, 0].size
+
+    if wyswietlaj_kaltki:
+        cv2.imshow('Decompressed Frame', cv2.cvtColor(Decompresed_Frame, cv2.COLOR_YCrCb2BGR))
+
+    
+
+    if np.any(auto_pause_frames == i):
+        cv2.waitKey(-1)
+
+    k = cv2.waitKey(1) & 0xff
+    if k == ord('q'):
+        break
+    elif k == ord('p'):
+        cv2.waitKey(-1)
+
+# wykres kompresji
+plt.figure()
+plt.plot(np.arange(0, ile), compression_information[0, :] * 100, label='Y')
+plt.plot(np.arange(0, ile), compression_information[1, :] * 100, label='Cb')
+plt.plot(np.arange(0, ile), compression_information[2, :] * 100, label='Cr')
+plt.title("File:{}, subsampling={}, divider={}, KeyFrame={},\n Kompresja bezstratna: ByteRun".format(plik, subsampling, dzielnik, key_frame_counter))
+plt.xlabel('Frame')
+plt.ylabel('Compression [%]')
+plt.legend()
+
+img_stream = BytesIO()
+plt.savefig(img_stream, format='png')
+img_stream.seek(0)
+if document is not None:
+    document.add_picture(img_stream, width=Inches(6))
+img_stream.close()
+plt.close()
 
 document.save('sprawozdanie9.docx')
 
-#print(f"Test: {subs}, dzielnik={dz}, CR={stopien_kompresji:.2f}")
 
-#if stopien_kompresji > najlepsza_kompresja:
-    #najlepsza_kompresja = stopien_kompresji
-    #najlepsze_ustawienia = (subs, dz)
-#print(f"\n>> Najlepsze ustawienia: {subsampling}, dzielnik={dzielnik}, kompresja={najlepsza_kompresja:.2f}")
-"""
-plt.figure()
-plt.plot(np.arange(0,ile),compression_information[0,:]*100)
-plt.plot(np.arange(0,ile),compression_information[1,:]*100)
-plt.plot(np.arange(0,ile),compression_information[2,:]*100)
-plt.title("File:{}, subsampling={}, divider={}, KeyFrame={} ".format(plik,subsampling,dzielnik,key_frame_counter))"""
+
 

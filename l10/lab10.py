@@ -23,7 +23,7 @@ def linear_func(x, a, b):
 def log_func(x, a, b):
     return a * np.log(x) + b
 
-def fit_and_plot(param_values, metric_values, metric_name="PSNR", method_name="blur"):
+def fit_and_plot(param_values, metric_values, metric_name="PSNR", method_name="blur", document=None):
     x = np.array(param_values)
     y = np.array(metric_values)
     
@@ -31,18 +31,18 @@ def fit_and_plot(param_values, metric_values, metric_name="PSNR", method_name="b
     pearson_corr, _ = pearsonr(x, y)
     spearman_corr, _ = spearmanr(x, y)
 
-    # Dopasuj różne modele
+    # Dopasuj modele
     popt_inv, _ = curve_fit(inverse_func, x, y)
     popt_lin, _ = curve_fit(linear_func, x, y)
     popt_log, _ = curve_fit(log_func, x, y)
 
-    # Generuj dane do wykresów
+    # Generuj dane dopasowania
     x_fit = np.linspace(min(x), max(x), 100)
     y_inv = inverse_func(x_fit, *popt_inv)
     y_lin = linear_func(x_fit, *popt_lin)
     y_log = log_func(x_fit, *popt_log)
 
-    # Rysuj
+    # Rysuj wykres
     plt.figure(figsize=(10, 6))
     plt.plot(x, y, 'o', label='Dane')
     plt.plot(x_fit, y_inv, '-', label='Dopasowanie odwrotne')
@@ -53,7 +53,21 @@ def fit_and_plot(param_values, metric_values, metric_name="PSNR", method_name="b
     plt.title(f"{metric_name} vs parametr degradacji ({method_name})")
     plt.legend()
     plt.grid(True)
-    plt.show()
+
+    # Dodaj do dokumentu
+    if document is not None:
+        buf = BytesIO()
+        plt.savefig(buf, format='png')
+        buf.seek(0)
+        document.add_picture(buf, width=Inches(5.5))
+        buf.close()
+        # Dodaj opis korelacji
+        document.add_paragraph(
+            f"Korelacja Pearsona: {pearson_corr:.4f}, Spearmana: {spearman_corr:.4f}"
+        )
+    else:
+        plt.show()
+    plt.close()
 
     return {
         "pearson": pearson_corr,
@@ -62,6 +76,7 @@ def fit_and_plot(param_values, metric_values, metric_name="PSNR", method_name="b
         "lin_params": popt_lin,
         "log_params": popt_log
     }
+
 
 
 def mse(K, I):
@@ -242,4 +257,29 @@ document.add_page_break()
 document.add_heading('Analiza korelacji', level=2)
 document.add_paragraph('Analiza korelacji dla rozmycia:')
 
+document.add_page_break()
+document.add_heading('Analiza korelacji – wszystkie metryki', level=2)
+
+
+def analyze_all_metrics(results, param_list, param_label, method_name, document):
+    for metric in ['MSE', 'NMSE', 'PSNR', 'IF', 'SSIM']:
+        y_vals = [res[metric] for res in results]
+        document.add_heading(f'{method_name.upper()} – {metric}', level=3)
+        document.add_paragraph(f'Parametr: {param_label}, Miara: {metric}')
+        fit_and_plot(param_list, y_vals, metric_name=metric, method_name=method_name, document=document)
+
+# Rozmycie
+param_list_blur = [params['d'] for (_, params) in blurs]
+analyze_all_metrics(results_blur, param_list_blur, 'd (średnica filtra)', 'blur', document)
+
+# Szum
+param_list_noise = [params['alpha'] for (_, params) in noises]
+analyze_all_metrics(results_noise, param_list_noise, 'alpha (siła szumu)', 'noise', document)
+
+# JPEG
+param_list_jpeg = [params['quality'] for (_, params) in JPEGs]
+analyze_all_metrics(results_jpeg, param_list_jpeg, 'jakość JPEG', 'jpeg', document)
+
+document.add_page_break()
+document.add_heading('Wnioski i obserwacje', level=2)
 document.save("Sprawozdanie10.docx")
