@@ -25,7 +25,7 @@ dzielnik=8                              # dzielnik przy zapisie różnicy
 wyswietlaj_kaltki=False                 # czy program ma wyświetlać klatki
 compressLuminance=False                  # czy kompresować luminancję    
 ROI = [                                 # regiony obrazu do wyświetlenia  porównawczego     
-        [150, 250, 150, 450], ]
+        [100, 300, 100, 300], ]
 loseless=False                          # czy ma być wykorzystany byterun   
 
 ##############################################################################
@@ -270,6 +270,7 @@ def plotDiffrence(ReferenceFrame,DecompressedFrame,ROI,document=None):
     # bardzo słaby i sztuczny przykład wykorzystania tej opcji
     # przerobić żeby porównanie było dokonywane w RGB nie YCrCb i/lub zastąpić innym porównaniem
     # ROI - Region of Insert współrzędne fragmentu który chcemy przybliżyć i ocenić w formacie [w1,w2,k1,k2]
+    # --- RGB ---
     fig, axs = plt.subplots(1, 3 , sharey=True   )
     fig.set_size_inches(16,5)
     ReferenceFrame_rgb = cv2.cvtColor(ReferenceFrame, cv2.COLOR_YCrCb2RGB)
@@ -286,6 +287,7 @@ def plotDiffrence(ReferenceFrame,DecompressedFrame,ROI,document=None):
     axs[0].axis('off')
     axs[1].axis('off')
     axs[2].axis('off')
+    plt.title("Porównanie klatek RGB")
     if document is not None:
         # Save the figure to a BytesIO object
         img_stream = BytesIO()
@@ -298,6 +300,126 @@ def plotDiffrence(ReferenceFrame,DecompressedFrame,ROI,document=None):
     else:
         plt.show()
     plt.close(fig)
+
+    # --- YCrCb ---, just Y layer
+    fig, axs = plt.subplots(1, 3 , sharey=True   )
+    fig.set_size_inches(16,5)
+    ReferenceFrame_y = ReferenceFrame[:, :, 0]
+    DecompressedFrame_y = DecompressedFrame[:, :, 0]
+    axs[0].imshow( (ReferenceFrame_y[ROI[0]:ROI[1],ROI[2]:ROI[3]]).clip(0, 255).astype(np.uint8), cmap='gray')
+    axs[2].imshow( (DecompressedFrame_y[ROI[0]:ROI[1],ROI[2]:ROI[3]]).clip(0, 255).astype(np.uint8), cmap='gray')
+    diff=ReferenceFrame_y[ROI[0]:ROI[1],ROI[2]:ROI[3]].astype(float)-DecompressedFrame_y[ROI[0]:ROI[1],ROI[2]:ROI[3]].astype(float)
+    axs[1].imshow(diff,vmin=np.min(diff),vmax=np.max(diff), cmap='gray')
+    axs[0].set_title('Reference Frame')
+    axs[1].set_title('Difference')
+    axs[2].set_title('Decompressed Frame')
+    axs[0].axis('off')
+    axs[1].axis('off')
+    axs[2].axis('off')
+    plt.title("Porównanie klatek warstwy Y")
+
+    if document is not None:
+        # Save the figure to a BytesIO object
+        img_stream = BytesIO()
+        plt.savefig(img_stream, format='png')
+        img_stream.seek(0)
+        # Add the image to the document
+        document.add_picture(img_stream, width=Inches(6))
+        # Close the BytesIO stream
+        img_stream.close()
+    else:
+        plt.show()
+    plt.close(fig)
+
+    # --- Cb layer ---
+    fig, axs = plt.subplots(1, 3 , sharey=True   )
+    fig.set_size_inches(16,5)
+    ReferenceFrame_y = ReferenceFrame[:, :, 1]
+    DecompressedFrame_y = DecompressedFrame[:, :, 1]
+    axs[0].imshow( (ReferenceFrame_y[ROI[0]:ROI[1],ROI[2]:ROI[3]]).clip(0, 255).astype(np.uint8), cmap='gray')
+    axs[2].imshow( (DecompressedFrame_y[ROI[0]:ROI[1],ROI[2]:ROI[3]]).clip(0, 255).astype(np.uint8), cmap='gray')
+    diff=ReferenceFrame_y[ROI[0]:ROI[1],ROI[2]:ROI[3]].astype(float)-DecompressedFrame_y[ROI[0]:ROI[1],ROI[2]:ROI[3]].astype(float)
+    axs[1].imshow(diff,vmin=np.min(diff),vmax=np.max(diff), cmap='gray')
+    axs[0].set_title('Reference Frame')
+    axs[1].set_title('Difference')
+    axs[2].set_title('Decompressed Frame')
+    axs[0].axis('off')
+    axs[1].axis('off')
+    axs[2].axis('off')
+    plt.title("Porównanie klatek Cr")
+
+    if document is not None:
+        # Save the figure to a BytesIO object
+        img_stream = BytesIO()
+        plt.savefig(img_stream, format='png')
+        img_stream.seek(0)
+        # Add the image to the document
+        document.add_picture(img_stream, width=Inches(6))
+        # Close the BytesIO stream
+        img_stream.close()
+    else:
+        plt.show()
+    plt.close(fig)
+
+    #--- Cr layer ---
+    fig, axs = plt.subplots(1, 3 , sharey=True   )
+    fig.set_size_inches(16,5)
+    ReferenceFrame_y = ReferenceFrame[:, :, 2]
+    DecompressedFrame_y = DecompressedFrame[:, :, 2]
+    axs[0].imshow( (ReferenceFrame_y[ROI[0]:ROI[1],ROI[2]:ROI[3]]).clip(0, 255).astype(np.uint8), cmap='gray')
+    axs[2].imshow( (DecompressedFrame_y[ROI[0]:ROI[1],ROI[2]:ROI[3]]).clip(0, 255).astype(np.uint8), cmap='gray')
+    diff=ReferenceFrame_y[ROI[0]:ROI[1],ROI[2]:ROI[3]].astype(float)-DecompressedFrame_y[ROI[0]:ROI[1],ROI[2]:ROI[3]].astype(float)
+    axs[1].imshow(diff,vmin=np.min(diff),vmax=np.max(diff), cmap='gray')
+    axs[0].set_title('Reference Frame')
+    axs[1].set_title('Difference')
+    axs[2].set_title('Decompressed Frame')
+    axs[0].axis('off')
+    axs[1].axis('off')
+    axs[2].axis('off')
+    plt.title("Porównanie klatek Cb")
+
+    if document is not None:
+        # Save the figure to a BytesIO object
+        img_stream = BytesIO()
+        plt.savefig(img_stream, format='png')
+        img_stream.seek(0)
+        # Add the image to the document
+        document.add_picture(img_stream, width=Inches(6))
+        # Close the BytesIO stream
+        img_stream.close()
+    else:
+        plt.show()
+    plt.close(fig)
+    #--- YCrCb ---
+    fig, axs = plt.subplots(1, 3 , sharey=True   )
+    fig.set_size_inches(16,5)
+    ReferenceFrame_y = ReferenceFrame
+    DecompressedFrame_y = DecompressedFrame
+    axs[0].imshow( (ReferenceFrame_y[ROI[0]:ROI[1],ROI[2]:ROI[3]]).clip(0, 255).astype(np.uint8), cmap='gray')
+    axs[2].imshow( (DecompressedFrame_y[ROI[0]:ROI[1],ROI[2]:ROI[3]]).clip(0, 255).astype(np.uint8), cmap='gray')
+    diff=ReferenceFrame_y[ROI[0]:ROI[1],ROI[2]:ROI[3]].astype(float)-DecompressedFrame_y[ROI[0]:ROI[1],ROI[2]:ROI[3]].astype(float)
+    axs[1].imshow(diff,vmin=np.min(diff),vmax=np.max(diff), cmap='gray')
+    axs[0].set_title('Reference Frame')
+    axs[1].set_title('Difference')
+    axs[2].set_title('Decompressed Frame')
+    axs[0].axis('off')
+    axs[1].axis('off')
+    axs[2].axis('off')
+    plt.title("Porównanie klatek YCrCb")
+
+    if document is not None:
+        # Save the figure to a BytesIO object
+        img_stream = BytesIO()
+        plt.savefig(img_stream, format='png')
+        img_stream.seek(0)
+        # Add the image to the document
+        document.add_picture(img_stream, width=Inches(6))
+        # Close the BytesIO stream
+        img_stream.close()
+    else:
+        plt.show()
+    plt.close(fig)
+
 
 
 
